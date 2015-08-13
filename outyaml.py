@@ -91,33 +91,37 @@ def render_outline(outline, settings):
         column_header.append(column_name)
         header.append(column_header)
 
-    table_tag.append(render_items(outline, settings))
+    table_tag.append(render_outline_items(outline, settings))
 
     return table_tag
 
 
-def render_items(outline, settings, level=1):
+def render_outline_items(outline, settings, level=1):
 
     items = []
 
-    for item in outline:
-        for title, attributes in item.items():
-            table_row = tr(class_=["level%d" % level])
+    def _render_item(title, attributes=None):
+        """ Render an item
 
-            cell = div(class_=[settings["columns"][0]["name"]])
-            cell.append_to(td().append_to(table_row))
+            Returns tag for item
+        """
+        table_row = tr(class_=["level%d" % level])
 
-            marker = div(class_=["marker"])
-            marker.append("&bull;")
-            cell.append(marker)
+        cell = div(class_=[settings["columns"][0]["name"]])
+        cell.append_to(td().append_to(table_row))
 
-            content = div(class_=["content"])
-            cell.append(content)
+        marker = div(class_=["marker"])
+        marker.append("&bull;")
+        cell.append(marker)
 
-            title_tag = div(class_=[settings["rows"][0]["name"]])
-            title_tag.append(title)
-            content.append(title_tag)
+        content = div(class_=["content"])
+        cell.append(content)
 
+        title_tag = div(class_=[settings["rows"][0]["name"]])
+        title_tag.append(title)
+        content.append(title_tag)
+
+        if type(attributes) is dict:
             for row in settings["rows"][1:]:
                 row_name = row["name"]
 
@@ -136,11 +140,21 @@ def render_items(outline, settings, level=1):
                 if column_name in attributes:
                     cell.append(attributes.get(column_name))
 
-            items.append(table_row)
+        return table_row
 
-            if "outline" in attributes:
-                items.extend(render_items(attributes["outline"],
-                                          settings, level+1))
+    for item in outline:
+        if type(item) is dict:
+            for title, attributes in item.items():
+
+                table_row = _render_item(title, attributes)
+                items.append(table_row)
+
+                if type(attributes) is dict and "outline" in attributes:
+                    items.extend(render_outline_items(attributes["outline"],
+                                            settings, level+1))
+        elif type(item) is str:
+            table_row = _render_item(item)
+            items.append(table_row)
 
     return items
 
@@ -172,13 +186,7 @@ def render_style(settings):
     return "".join(style_sheet)
 
 
-if "__main__" == __name__:
-    documents = yaml.load_all(sys.stdin.read())
-    settings = {}
-    outlines = []
-
-
-
+def render_outlines(documents):
     for document in documents:
         if ("columns" in document and "rows" in document and
             "levels" in document):
@@ -191,13 +199,22 @@ if "__main__" == __name__:
 
     content = body()
 
+    scss = ""
+    if "sass" in settings:
+        source = settings["sass"]
+        import sass
+        scss = sass.compile(string=source)
+
     for outline in outlines:
         content.append(render_outline(outline, settings))
 
     html_document = html().append(
         head().append(
             style(type_="text/css").append(
+                scss
+            ).append(
                 """
+                body { margin: 0px; }
                 .outline {
                 display: -webkit-box;
                 display: -moz-boz;
@@ -209,8 +226,8 @@ if "__main__" == __name__:
                 .marker {
                 font-weight: bold;
                 text-align: center;
-                -webkit-flex: 0 0 1em;
-                flex: 0 0 1em;
+                -webkit-flex: 0 0 20px;
+                flex: 0 0 20px;
                 }
                 .content {
                 -webkit-flex: 1 1 auto;
@@ -226,5 +243,16 @@ if "__main__" == __name__:
     ).append(
         content
     )
+
+    return html_document
+
+if "__main__" == __name__:
+    documents = yaml.load_all(sys.stdin.read())
+    settings = {}
+    outlines = []
+
+
+
+
 
     print(html_document)
